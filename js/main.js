@@ -232,22 +232,22 @@ window.addEventListener('DOMContentLoaded', () => {
 	let swapMult = 1;
 	function swap() {
 		for (let i=0; i<r0.length; i++) {
-			r0[i].position.z += swapMult*sqrt(3);
+			r0[i].position.z += swapMult*1;
 		}
 		for (let i=0; i<r1.length; i++) {
-			r1[i].position.x += swapMult*(r1vertices[0*3]-r1vertices[7*3]);
-			r1[i].position.y += swapMult*(r1vertices[0*3+1]-r1vertices[7*3+1]);
-			r1[i].position.z += swapMult*(r1vertices[0*3+2]-r1vertices[7*3+2]);
+			r1[i].position.x += swapMult*(vertices[0*3]-r1vertices[7*3]);
+			r1[i].position.y += swapMult*(vertices[0*3+1]-r1vertices[7*3+1]);
+			r1[i].position.z += swapMult*(vertices[0*3+2]+1-r1vertices[7*3+2]);
 		}
 		for (let i=0; i<r2.length; i++) {
-			r2[i].position.x += swapMult*(r2vertices[0*3]-r2vertices[7*3]);
-			r2[i].position.y += swapMult*(r2vertices[0*3+1]-r2vertices[7*3+1]);
-			r2[i].position.z += swapMult*(r2vertices[0*3+2]-r2vertices[7*3+2]);
+			r2[i].position.x += swapMult*(vertices[0*3]-r2vertices[7*3]);
+			r2[i].position.y += swapMult*(vertices[0*3+1]-r2vertices[7*3+1]);
+			r2[i].position.z += swapMult*(vertices[0*3+2]+1-r2vertices[7*3+2]);
 		}
 		for (let i=0; i<r3.length; i++) {
-			r3[i].position.x += swapMult*(r3vertices[0*3]-r3vertices[7*3]);
-			r3[i].position.y += swapMult*(r3vertices[0*3+1]-r3vertices[7*3+1]);
-			r3[i].position.z += swapMult*(r3vertices[0*3+2]-r3vertices[7*3+2]);
+			r3[i].position.x += swapMult*(vertices[0*3]-r3vertices[7*3]);
+			r3[i].position.y += swapMult*(vertices[0*3+1]-r3vertices[7*3+1]);
+			r3[i].position.z += swapMult*(vertices[0*3+2]+1-r3vertices[7*3+2]);
 		}
 		swapMult *= -1;
 	}
