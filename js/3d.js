@@ -1,5 +1,5 @@
 
-export {Vec, Line, Plane, Piped, Camera};
+export {Vec, Point, Line, Plane, Piped, Camera, dist, linePointDistance, getConvexHull};
 
 function Point(x, y) {
 	return {x, y};
@@ -53,6 +53,10 @@ function proj(a, b) {
 	return mul(b, dot(a, b))
 }
 
+function dist(a, b) {
+	return mag(sub(a, b));
+}
+
 function rotz(a, theta) {
 	const x = Math.cos(theta)*a.x - Math.sin(theta)*a.y;
 	const y = Math.sin(theta)*a.x + Math.cos(theta)*a.y;
@@ -71,12 +75,101 @@ function roty(a, theta) {
 	return Vec(x, a.y, z);
 }
 
+// Looking from b toward s (b is eye and s is point on the viewing plane)
+function linePointDistance(b, s, p) {
+	const a = sub(s, b);
+	const A = a.x*a.x + a.y*a.y + a.z*a.z;
+	const B = 2*a.x*b.x + 2*a.y*b.y + 2*a.z*b.z 
+		- (s.x+p.x)*a.x - (s.y+p.y)*a.y - (s.z+p.z)*a.z;
+	const C = s.x*p.x + s.y*p.y + s.z*p.z 
+		+ b.x*b.x + b.y*b.y + b.z*b.z 
+		- (s.x+p.x)*b.x - (s.y+p.y)*b.y - (s.z+p.z)*b.z;
+	const t1 = (-B + Math.sqrt(B*B - 4*A*C)) / (2*A);
+	const t2 = (-B - Math.sqrt(B*B - 4*A*C)) / (2*A);
+	let d1 = Infinity;
+	let d2 = Infinity;
+	if (t1 >= 0) {
+		const c = add(mul(a, t1), b);
+		d1 = dist(c, p);
+	}
+	if (t2 >= 0) {
+		const c = add(mul(a, t2), b);
+		d2 = dist(c, p);
+	}
+	if (d2 < d1) {
+		return d2;
+	}
+	return d1;
+}
+
+function getConvexHull(ps) {
+	let a = 0;
+	let b = 0;
+	init:
+	for (let i=0; i<ps.length; i++) {
+		for (let j=i+1; j<ps.length; j++) {
+			let cp = null;
+			for (let k=j+1; k<ps.length; k++) {
+				const mycp = cross(sub(ps[k], ps[j]), sub(ps[j], ps[i]));
+				if (cp == null) {
+					cp = mycp;
+					continue;
+				}
+				if (dot(cp, mycp) < 0) {
+					continue init;
+				}
+			}
+			a = i;
+			b = j;
+			break init;
+		}
+	}
+	const edges = [new Line(ps[a], ps[b])];
+	for (let k=0; k<ps.length-1; k++) {
+		let found = false;
+		outer:
+		for (let i=0; i<ps.length; i++) {
+			const cp = cross(sub(ps[i], ps[b]), sub(ps[b], ps[a]));
+			if (i == b || i == a) {
+				continue;
+			}
+			for (let j=0; j<ps.length; j++) {
+				if (j == i || j == b || j == a) {
+					continue;
+				}
+				const mycp = cross(sub(ps[j], ps[i]), sub(ps[i], ps[b]));
+				if (dot(cp, mycp) < 0) {
+					continue outer;
+				}
+			}
+			edges.push(new Line(ps[b], ps[i]));
+			a = b;
+			b = i;
+			found = true;
+			break;
+		}
+		if (!found) {
+			break;
+		}
+	}
+	return edges;
+}
+
 class Piped {
 	constructor(c, x, y, z) {
 		this.c = c;
 		this.x = x;
 		this.y = y;
 		this.z = z;
+	}
+
+	get center() {
+		const vs = this.vertices;
+		let c = Vec(0,0,0);
+		vs.forEach(v => {
+			c = add(c, v);
+		});
+		return mul(c, 1/8);
 	}
 
 	getCrossSection(pl) {
@@ -90,44 +183,7 @@ class Piped {
 		if (ps.length < 3) {
 			return [];
 		}
-		let min = Infinity;
-		let a = -1;
-		let b = -1;
-		for (let i=0; i<ps.length; i++) {
-			for (let j=i+1; j<ps.length; j++) {
-				const d = mag(sub(ps[i], ps[j]));
-				if (d < min) {
-					min = d;
-					a = i;
-					b = j;
-				}
-			}
-		}
-		// Convex hull algorithm
-		const edges = [new Line(ps[a], ps[b])];
-		for (let i=0; i<ps.length-1; i++) {
-			outer:
-			for (let i=0; i<ps.length; i++) {
-				const cp = cross(sub(ps[i], ps[b]), sub(ps[b], ps[a]));
-				if (i == b || i == a) {
-					continue;
-				}
-				for (let j=0; j<ps.length; j++) {
-					if (j == i || j == b || j == a) {
-						continue;
-					}
-					const mycp = cross(sub(ps[j], ps[i]), sub(ps[i], ps[b]));
-					if (dot(cp, mycp) < 0) {
-						continue outer;
-					}
-				}
-				edges.push(new Line(ps[b], ps[i]));
-				a = b;
-				b = i;
-				break;
-			}
-		}
-		return edges;
+		return getConvexHull(ps);
 	}
 
 	draw(camera) {
@@ -167,6 +223,26 @@ class Piped {
 		return edges;
 	}
 
+	genPipedsFromVertex(v1) {
+		const c = this.center;
+		const v2 = add(v1, sub(v1, c));
+		// Get neighbors
+		const ns = [];
+		this.edges.forEach(e => {
+			if (dist(v1, e.a) < 0.01) {
+				ns.push(e.b);
+			} else if (dist(v1, e.b) < 0.01) {
+				ns.push(e.a);
+			}
+		});
+		const pipeds = [
+			new Piped(v1, v2, ns[0], ns[1]),
+			new Piped(v1, v2, ns[0], ns[2]),
+			new Piped(v1, v2, ns[1], ns[2])
+		];
+		return pipeds;
+	}
+
 	rot(rot, theta) {
 		this.c = rot(this.c, theta);
 		this.x = rot(this.x, theta);
@@ -184,6 +260,18 @@ class Piped {
 
 	roty(theta) {
 		this.rot(roty, theta);
+	}
+
+	get vertices() {
+		const xc = sub(this.x, this.c);
+		const yc = sub(this.y, this.c);
+		const zc = sub(this.z, this.c);
+		const vs = [this.c, this.x, this.y, this.z];
+		vs.push(add(this.x, yc));
+		vs.push(add(this.x, zc));
+		vs.push(add(this.z, yc));
+		vs.push(add(add(this.z, yc), xc));
+		return vs;
 	}
 }
 
@@ -231,6 +319,7 @@ class Camera {
 		this.canvas = params.canvas;
 		this.ctx = this.canvas.getContext('2d');
 		// Calculate w direction
+		// Unit vectors in the "y axis" (hc) and "x axis" (wc)
 		this.hc = unit(sub(this.h, this.c));
 		this.ec = unit(sub(this.eye, this.c));
 		this.wc = cross(this.hc, this.ec);
@@ -266,5 +355,13 @@ class Camera {
 		const xx = this.canvas.width/2 + x;
 		const yy = this.canvas.height/2 - y;
 		return Point(xx, yy);
+	}
+
+	screenToWorld(p) {
+		const x = (p.x-this.canvas.width/2)/this.canvas.height;
+		const y = (this.canvas.height/2-p.y)/this.canvas.height;
+		p = add(mul(this.hc, y), mul(this.wc, x));
+		p = add(this.c, p);
+		return p;
 	}
 }

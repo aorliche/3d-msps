@@ -7,7 +7,28 @@
 </head>
 <body>
     <h1>3D MSPs</h1>
-    <canvas id="canvas" width="800" height="600"></canvas>
+	<div id='container'>
+		<canvas id="canvas" width="800" height="600"></canvas>
+		<div id='controls'>
+			<div>
+				Click to select a vertex for generation.
+			</div>
+			<div>
+				<button id='bReset'>Reset</button>
+				<button id='bGenFromV'>Generate from Outside Vertex</button>
+			</div>
+			<div>
+				Press X, Y, or Z keys to rotate around those axes.<br>
+				<input type='radio' id='rot-pos' name='rot-sign' checked>+ Rotation
+				<input type='radio' id='rot-neg' name='rot-sign'>- Rotation
+			</div>
+			<div>
+				<button id='bCrossFwd'>Cross section (+)</button>
+				<button id='bCrossRev'>Cross section (-)</button><br>
+				Arrow keys also change cross section.
+			</div>
+		</div>
+	</div>
 </body>
 </html>
 

@@ -1,3 +1,14 @@
 #canvas {
     border: 1px solid black;
 }
+#container {
+	display: flex;
+	flex-wrap: wrap;
+}
+#controls {
+	width: 350px;
+	margin-left: 10px;
+}
+#controls > div {
+	margin-bottom: 10px;
+}
