@@ -102,6 +102,7 @@ window.addEventListener('load', e => {
 	hulls.push(new Hull2D({points: [Vec(0,0,0), Vec(1,0,0), Vec(0,1,0)]}));
 	hulls.push(new Hull2D({points: [Vec(0,0,-1), Vec(1,0,-1), Vec(0,1,-1)]}));
 	hulls.push(new Hull2D({points: [Vec(0,0,1), Vec(1,0,1), Vec(0,1,1)]}));
+	hulls.push(new Hull2D({points: [Vec(1,1,0), Vec(1,2,0), Vec(2,2,0)]}));
 	const camera = new Camera({canvas: $('#canvas')});
 	function repaint() {
 		camera.clear();
@@ -132,25 +133,21 @@ window.addEventListener('load', e => {
 // Invariant: hulls assumed not to cross each other
 // All points in hulls assumed to lie on the same plane
 function orderHulls(hulls, camera) {
-	const occluders = hulls.map(h => 0);
+	const occludes = hulls.map(h => 0);
 	for (let i=0; i<hulls.length; i++) {
 		for (let j=i+1; j<hulls.length; j++) {
 			if (hulls[i].occludes(hulls[j], camera)) {
-				occluders[i]++;
+				occludes[i]++;
 			} else if (hulls[j].occludes(hulls[i], camera)) {
-				occluders[j]++;
-			} else {
-				// Dirty hack because sometimes i doesn't occlude j and j doesn't occlude i
-				// Seems to work so far
-				occluders[i]++;
-			}
+				occludes[j]++;
+			} 
 		}
 	}
-	const sorted = hulls.map(h => 0);
-	for (let i=0; i<occluders.length; i++) {
-		sorted[occluders[i]] = hulls[i];
-	}
-	return sorted;
+	const sorted = hulls.map((h,i) => [h,i]);
+	sorted.sort(function (a,b) {
+		return occludes[a[1]] - occludes[b[1]];
+	});
+	return sorted.map(hi => hi[0]);
 }
 
 // Hull class made up of point segments
