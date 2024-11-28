@@ -97,15 +97,25 @@ function testHulls() {
 }
 
 window.addEventListener('load', e => {
-	testHulls();
+	/*testHulls();
 	const hulls = [];
 	hulls.push(new Hull2D({points: [Vec(0,0,0), Vec(1,0,0), Vec(0,1,0)]}));
 	hulls.push(new Hull2D({points: [Vec(0,0,-1), Vec(1,0,-1), Vec(0,1,-1)]}));
 	hulls.push(new Hull2D({points: [Vec(0,0,1), Vec(1,0,1), Vec(0,1,1)]}));
-	hulls.push(new Hull2D({points: [Vec(1,1,0), Vec(1,2,0), Vec(2,2,0)]}));
+	hulls.push(new Hull2D({points: [Vec(1,1,0), Vec(1,2,0), Vec(2,2,0)]}));*/
+	const pipeds = [];
+	//pipeds.push(new Piped({points: [Vec(0,0,0), Vec(1,0,0), Vec(0,1,0), Vec(0,0,1)]}));
+	pipeds.push(new Piped({points: [Vec(1,0,0), Vec(1,1,0), Vec(1,0,1), Vec(2,0,0)]}));
+	pipeds.push(new Piped({points: [Vec(-1,-0.5,1), Vec(-2,-0.4,1), Vec(-1,-1.4,1), Vec(-1,-0.4,2)]}));
 	const camera = new Camera({canvas: $('#canvas')});
 	function repaint() {
 		camera.clear();
+		const hulls = [];
+		pipeds.forEach(p => {
+			p.hulls.forEach(h => {
+				hulls.push(h);
+			});
+		});
 		const sorted = orderHulls(hulls, camera);
 		sorted.forEach(h => {
 			h.draw({camera, fillStyle: 'red', strokeStyle: 'black'});
@@ -133,21 +143,76 @@ window.addEventListener('load', e => {
 // Invariant: hulls assumed not to cross each other
 // All points in hulls assumed to lie on the same plane
 function orderHulls(hulls, camera) {
-	const occludes = hulls.map(h => 0);
+	const occludes = hulls.map(h => []);
 	for (let i=0; i<hulls.length; i++) {
 		for (let j=i+1; j<hulls.length; j++) {
 			if (hulls[i].occludes(hulls[j], camera)) {
-				occludes[i]++;
+				occludes[i].push(j);
 			} else if (hulls[j].occludes(hulls[i], camera)) {
-				occludes[j]++;
+				occludes[j].push(i);;
 			} 
 		}
 	}
 	const sorted = hulls.map((h,i) => [h,i]);
 	sorted.sort(function (a,b) {
-		return occludes[a[1]] - occludes[b[1]];
+		if (occludes[a[1]].includes(b[1])) {
+			return 1;
+		} else if (occludes[b[1]].includes(a[1])) {
+			return -1;
+		} else {
+			return 0;
+		}
 	});
 	return sorted.map(hi => hi[0]);
+}
+
+class Piped {
+	constructor(params) {
+		if (params.points.length != 4) {
+			console.log("Bad number of points in Piped constructor");
+		}
+		// Deep copy
+		this.points = params.points.map(p => Vec(p.x, p.y, p.z));
+	}
+
+	get sides() {
+		const a = sub(this.points[1], this.points[0]);
+		const b = sub(this.points[2], this.points[0]);
+		const c = sub(this.points[3], this.points[0]);
+		return [a, b, c];
+	}
+
+	get allPoints() {
+		this.points.forEach(p => points.push(p));
+		const [a, b, c] = this.sides;
+		const ds = [add(a, b), add(a, c), add(b, c), add(add(a, b), c)];
+		ds.forEach(d => points.push(add(this.points[0], d)));
+		return points;
+	}
+
+	get hulls() {
+		const [a, b, c] = this.sides;
+		const firstThree = [[a, b], [a, c], [b, c]];
+		const secondThree = [[neg(a), neg(b)], [neg(a), neg(c)], [neg(b), neg(c)]];
+		const firstStart = this.points[0];
+		const secondStart = add(this.points[0], add(a, add(b, c)));
+		const hulls = [];
+		firstThree.forEach(pair => {
+			const [a, b] = pair;
+			const points = [];
+			const sides = [Vec(0,0,0), a, add(a,b), b];
+			sides.forEach(s => points.push(add(firstStart, s)));
+			hulls.push(new Hull2D({points}));
+		});
+		secondThree.forEach(pair => {
+			const [a, b] = pair;
+			const points = [];
+			const sides = [Vec(0,0,0), a, add(a,b), b];
+			sides.forEach(s => points.push(add(secondStart, s)));
+			hulls.push(new Hull2D({points}));
+		});
+		return hulls;
+	}
 }
 
 // Hull class made up of point segments
@@ -155,8 +220,7 @@ function orderHulls(hulls, camera) {
 class Hull2D {
 	constructor(params) {
 		// Deep copy
-		const points = params.points;
-		this.points = points.map(p => Vec(p.x, p.y, p.z));
+		this.points = params.points.map(p => Vec(p.x, p.y, p.z));
 	}
 
 	draw(params) {
@@ -224,13 +288,10 @@ class Hull2D {
 				testPoints.push(this.points[i]);
 			}
 		}
-		const ts = testPoints.map(p => lineIntersectsPlane(camera.eye, p, hull.plane));
-		if (log) {
-			console.log(camera.eye);
-			console.log(testPoints[0]);
-			console.log(hull.plane);
-			console.log(ts);
+		if (testPoints.length == 0) {
+			return false;
 		}
+		const ts = testPoints.map(p => lineIntersectsPlane(camera.eye, p, hull.plane));
 		// Sanity check that hulls do not cross
 		outer:
 		for (let i=0; i<ts.length; i++) {
@@ -241,7 +302,16 @@ class Hull2D {
 				}
 			}
 		}
-		return ts[0] > 0;
+		// Awful (ts[0] < -1) hack because of camera angles
+		// Not sure why it works or if it's robust
+		// This means that intersection point is behind the eye
+		//return ts[0] > 0 || ts[0] < -1;
+		for (let i=0; i<ts.length; i++) {
+			if (ts[i] > 0 || ts[i] < -1) {
+				return true;
+			}
+		}
+		return false;
 	}
 }
 
@@ -303,6 +373,8 @@ class Camera {
 		this.wc = cross(this.hc, this.ec);
 	}
 
+	// Rotate point b theta degrees around the axis c 
+	// c assumed to start from (0,0,0)
 	rotate(b, c, theta) {
 		const bc = cross(b, c);
 		const t = Math.tan(theta)*mag(b)/mag(bc);
