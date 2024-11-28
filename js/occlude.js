@@ -104,7 +104,7 @@ window.addEventListener('load', e => {
 	hulls.push(new Hull2D({points: [Vec(0,0,1), Vec(1,0,1), Vec(0,1,1)]}));
 	hulls.push(new Hull2D({points: [Vec(1,1,0), Vec(1,2,0), Vec(2,2,0)]}));*/
 	const pipeds = [];
-	//pipeds.push(new Piped({points: [Vec(0,0,0), Vec(1,0,0), Vec(0,1,0), Vec(0,0,1)]}));
+	pipeds.push(new Piped({points: [Vec(0,0,0), Vec(1,0,0), Vec(0,1,0), Vec(0,0,1)]}));
 	pipeds.push(new Piped({points: [Vec(1,0,0), Vec(1,1,0), Vec(1,0,1), Vec(2,0,0)]}));
 	pipeds.push(new Piped({points: [Vec(-1,-0.5,1), Vec(-2,-0.4,1), Vec(-1,-1.4,1), Vec(-1,-0.4,2)]}));
 	const camera = new Camera({canvas: $('#canvas')});
@@ -271,47 +271,16 @@ class Hull2D {
 		return Plane(Vec(normal.x, normal.y, normal.z), Vec(p0.x, p0.y, p0.z));
 	}
 
-	occludes(hull, camera, log) {
-		const eps = 1e-5;
-		// Remove vertices which are approximately equal for the two hulls
-		// To prevent approximation errors
-		const testPoints = [];
-		for (let i=0; i<this.points.length; i++) {
-			let eq = false;
-			for (let j=0; j<hull.points.length; j++) {
-				if (dist(this.points[i], hull.points[j]) < eps) {
-					eq = true;
-					break;
-				}
-			}
-			if (!eq) {
-				testPoints.push(this.points[i]);
-			}
-		}
-		if (testPoints.length == 0) {
-			return false;
-		}
-		const ts = testPoints.map(p => lineIntersectsPlane(camera.eye, p, hull.plane));
-		// Sanity check that hulls do not cross
-		outer:
-		for (let i=0; i<ts.length; i++) {
-			for (let j=i+1; j<ts.length; j++) {
-				if (ts[i]*ts[j] < 0) {
-					console.log("Colliding hulls in Hull2D.occludes()");
-					break outer;
-				}
-			}
-		}
-		// Awful (ts[0] < -1) hack because of camera angles
-		// Not sure why it works or if it's robust
-		// This means that intersection point is behind the eye
-		//return ts[0] > 0 || ts[0] < -1;
-		for (let i=0; i<ts.length; i++) {
-			if (ts[i] > 0 || ts[i] < -1) {
-				return true;
-			}
-		}
-		return false;
+	occludes(hull, camera) {
+		let distMe = 0;
+		let distHull = 0;
+		this.points.forEach(p => {
+			distMe += mag(sub(p, camera.eye));
+		});
+		hull.points.forEach(p => {
+			distHull += mag(sub(p, camera.eye));
+		});
+		return distMe < distHull;
 	}
 }
 
