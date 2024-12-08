@@ -1,5 +1,5 @@
 
-import {$, $$} from "./util.js";
+import {$, $$, fillCircle} from "./util.js";
 
 function Plane(normal, point) {
 	return {normal, point};
@@ -96,6 +96,150 @@ function testHulls() {
 	console.log(sorted);
 }
 
+function selectVertex(p, pipeds, camera) {
+	const points = [];
+	pipeds.forEach(p => {
+		const ps = p.allPoints;
+		outer:
+		for (let i=0; i<ps.length; i++) {
+			for (let j=0; j<points.length; j++) {
+				if (mag(sub(ps[i], points[j])) < 0.01) {
+					continue outer;
+				}
+			}
+			points.push(ps[i]);
+		}
+	});
+	const v = Vec(p.x, p.y, 0);
+	let res = null;
+	for (let i=0; i<points.length; i++) {
+		const pp = camera.projectToScreen(points[i]);
+		if (mag(sub(Vec(pp.x, pp.y, 0), v)) < 5) {
+			if (res) {
+				if (mag(sub(points[i], camera.eye)) < mag(sub(res, camera.eye))) {
+					res = points[i];
+				}
+			} else {
+				res = points[i];
+			}
+		}
+	}
+	return res;
+}
+
+function neighborDistance(v, pipeds) {
+	let d = 0;
+	pipeds.forEach(pi => {
+		pi.allPoints.forEach(p => {
+			d += dist(v, p);
+		});
+	});
+	return d;
+}
+
+function generatePipeds(v, pipeds) {
+	// Find vertices connected to v
+	// Also keep track of all pipeds that are neighbors
+	const otherV = [];
+	const nbrPipeds = [];
+	pipeds.forEach(p => {
+		p.sidePairs.forEach(sp => {
+			let nbr = false;
+			if (mag(sub(v, sp[0])) < 0.01) {
+				otherV.push(sp[1]);
+				nbr = true;	
+			} else if (mag(sub(v, sp[1])) < 0.01) {
+				otherV.push(sp[0]);
+				nbr = true
+			}
+			if (nbr && !nbrPipeds.includes(p)) {
+				nbrPipeds.push(p);
+			}
+		});
+	});
+	// Remove duplicates
+	const otherVUniq = [];
+	outer:
+	for (let i=0; i<otherV.length; i++) {
+		for (let j=0; j<otherVUniq.length; j++) {
+			if (mag(sub(otherV[i], otherVUniq[j])) < 0.01) {
+				continue outer;
+			}
+		}
+		otherVUniq.push(otherV[i]);
+	}
+	// Average vs to get normal
+	let avg = Vec(0,0,0);
+	otherVUniq.forEach(v => {
+		avg = add(avg, v);
+	});
+	avg = mul(avg, 1/otherVUniq.length);
+	// Get outside point
+	let nv = add(v, unit(sub(v, avg)));
+	// Invert for concave holes
+	if (neighborDistance(nv, nbrPipeds) < neighborDistance(v, nbrPipeds)) {
+		const d = sub(v, nv);
+		nv = add(nv, mul(d, 2));
+	}
+	// Get neighboring faces
+	const faces = [];
+	const facesUniq = [];
+	nbrPipeds.forEach(pi => {
+		pi.hulls.forEach(face => {
+			// Check whether face contains two points
+			let foundV = false;
+			let foundOtherV = false;
+			for (let i=0; i<face.points.length; i++) {
+				if (mag(sub(face.points[i], v)) < 0.01) {
+					foundV = true;
+				}
+				for (let j=0; j<otherVUniq.length; j++) {
+					if (mag(sub(face.points[i], otherVUniq[j])) < 0.01) {
+						foundOtherV = true;
+						break;
+					}
+				}
+			}
+			if (!foundV || !foundOtherV) {
+				return;
+			}
+			let found = false;
+			for (let i=0; i<faces.length; i++) {
+				if (face.equals(faces[i][0])) {
+					faces[i][1]++;
+					found = true;
+				}
+			}
+			if (!found) {
+				faces.push([face, 1]);
+			}
+		});
+	});
+	// Get unique faces
+	for (let i=0; i<faces.length; i++) {
+		if (faces[i][1] == 1) {
+			facesUniq.push(faces[i][0]);
+		}
+	}
+	// Construct new pipeds
+	const npipeds = [];
+	for (let i=0; i<facesUniq.length; i++) {
+		const face = facesUniq[i];
+		const points =[v, nv];
+		outer:
+		for (let j=0; j<face.points.length; j++) {
+			for (let k=0; k<otherVUniq.length; k++) {
+				if (mag(sub(face.points[j], otherVUniq[k])) < 0.01) {
+					points.push(face.points[j]);
+					continue outer;
+				}
+			}
+		}
+		npipeds.push(new Piped({points}));
+	}
+	return npipeds;
+}
+
 window.addEventListener('load', e => {
 	/*testHulls();
 	const hulls = [];
@@ -107,7 +251,10 @@ window.addEventListener('load', e => {
 	pipeds.push(new Piped({points: [Vec(0,0,0), Vec(1,0,0), Vec(0,1,0), Vec(0,0,1)]}));
 	pipeds.push(new Piped({points: [Vec(1,0,0), Vec(1,1,0), Vec(1,0,1), Vec(2,0,0)]}));
 	pipeds.push(new Piped({points: [Vec(-1,-0.5,1), Vec(-2,-0.4,1), Vec(-1,-1.4,1), Vec(-1,-0.4,2)]}));
-	const camera = new Camera({canvas: $('#canvas')});
+	const canvas = $('#canvas');
+	const camera = new Camera({canvas});
+	let selectedVertex = null;
+	let debugVs = null;
 	function repaint() {
 		camera.clear();
 		const hulls = [];
@@ -120,6 +267,16 @@ window.addEventListener('load', e => {
 		sorted.forEach(h => {
 			h.draw({camera, fillStyle: 'red', strokeStyle: 'black'});
 		});
+		if (selectedVertex) {
+			const p = camera.projectToScreen(selectedVertex);
+			fillCircle(camera.ctx, p, 5, 'blue');
+		}
+		if (debugVs) {
+			debugVs.forEach(v => {
+				const p = camera.projectToScreen(v);
+				fillCircle(camera.ctx, p, 5, 'green');
+			});
+		}
 	}
 	repaint();
 	document.addEventListener('keydown', e => {
@@ -137,12 +294,55 @@ window.addEventListener('load', e => {
 		}
 		repaint();
 	});
+	let mouseCur = null;
+	canvas.addEventListener('mousedown', e => {
+		mouseCur = Point(e.offsetX, e.offsetY);
+	});
+	canvas.addEventListener('mouseup', e => {
+		if (!mouseCur) return;
+		// Click
+		const newCur = Point(e.offsetX, e.offsetY);
+		const delta = Point(newCur.x-mouseCur.x, newCur.y-mouseCur.y);
+		if (mag(Vec(delta.x, delta.y, 0)) < 5) {
+			selectedVertex = selectVertex(mouseCur, pipeds, camera);
+			repaint();
+		}
+		// Stop rotating
+		mouseCur = null;
+	});
+	canvas.addEventListener('mousemove', e => {
+		if (!mouseCur) return;
+		const newCur = Point(e.offsetX, e.offsetY);
+		const delta = Point(newCur.x-mouseCur.x, newCur.y-mouseCur.y);
+		mouseCur = newCur;
+		const movex = 0.05*delta.x;
+		const movey = 0.05*delta.y;
+		camera.rotateAroundVertical(movex);
+		camera.rotateAroundHorizontal(movey);
+		repaint();
+	});
+	canvas.addEventListener('mouseleave', e => {
+		mouseCur = null;
+	});
+	canvas.addEventListener('focusout', e => {
+		mouseCur = null;
+	});
+	$('#bGenFromV').addEventListener('click', e => {
+		if (!selectedVertex) return;
+		const newPipeds = generatePipeds(selectedVertex, pipeds);
+		if (!newPipeds) return;
+		newPipeds.forEach(p => {
+			pipeds.push(p);
+		});
+		selectedVertex = null;
+		repaint();
+	});
 });
 
 // 2D hulls ordered from back to front
 // Invariant: hulls assumed not to cross each other
 // All points in hulls assumed to lie on the same plane
-function orderHulls(hulls, camera) {
+function orderHulls(hulls,camera) {
 	const occludes = hulls.map(h => []);
 	for (let i=0; i<hulls.length; i++) {
 		for (let j=i+1; j<hulls.length; j++) {
@@ -182,7 +382,29 @@ class Piped {
 		return [a, b, c];
 	}
 
+	// For generating pipeds
+	// Each piped has 12 sides
+	get sidePairs() {
+		const pairs = []; 
+		const [a, b, c] = this.sides;
+		pairs.push([this.points[0], this.points[1]]);
+		pairs.push([this.points[0], this.points[2]]);
+		pairs.push([this.points[0], this.points[3]]);
+		pairs.push([this.points[1], add(this.points[1], b)]);
+		pairs.push([this.points[1], add(this.points[1], c)]);
+		pairs.push([this.points[2], add(this.points[2], a)]);
+		pairs.push([this.points[2], add(this.points[2], c)]);
+		pairs.push([this.points[3], add(this.points[3], a)]);
+		pairs.push([this.points[3], add(this.points[3], b)]);
+		const fp = add(this.points[0], add(add(a, b), c));
+		pairs.push([fp, sub(fp, a)]);
+		pairs.push([fp, sub(fp, b)]);
+		pairs.push([fp, sub(fp, c)]);
+		return pairs;
+	}
+
 	get allPoints() {
+		const points = [];
 		this.points.forEach(p => points.push(p));
 		const [a, b, c] = this.sides;
 		const ds = [add(a, b), add(a, c), add(b, c), add(add(a, b), c)];
@@ -269,6 +491,19 @@ class Hull2D {
 		}
 		const p0 = this.points[0];
 		return Plane(Vec(normal.x, normal.y, normal.z), Vec(p0.x, p0.y, p0.z));
+	}
+
+	equals(hull) {
+		let numFound = 0;
+		for (let i=0; i<this.points.length; i++) {
+			for (let j=0; j<hull.points.length; j++) {
+				if (mag(sub(this.points[i], hull.points[j])) < 0.01) {
+					numFound++;
+					break;
+				}
+			}
+		}
+		return numFound == this.points.length && numFound == hull.points.length;
 	}
 
 	occludes(hull, camera) {
