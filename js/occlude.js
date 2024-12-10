@@ -258,7 +258,7 @@ window.addEventListener('load', e => {
 	const canvas = $('#canvas');
 	const camera = new Camera({canvas});
 	let selectedVertex = null;
-	let debugVs = null;
+	let debugVs = pipeds[0].hulls[0].pointsInside;
 	function repaint() {
 		camera.clear();
 		const hulls = [];
@@ -556,62 +556,45 @@ class Hull2D {
 		return true;
 	}
 
-	get pointInside() {
-		const parts = generateParts(this.points.length);
-		let point = Vec(0,0,0);
-		for (let j=0; j<parts.length; j++) {
-			point = add(point, mul(this.points[j], parts[j]));
+	get pointsInside() {
+		const da = mul(sub(this.points[1], this.points[0]), 1/26);
+		const db = mul(sub(this.points[3], this.points[0]), 1/26);
+		const points = [];
+		for (let i=1; i<=25; i+=8) {
+			const a = mul(da, i);
+			for (let j=1; j<=25; j+=8) {
+				const b = mul(db, j);
+				const p = add(this.points[0], add(a, b));
+				points.push(p);
+			}
 		}
-		return point;
+		return points;
 	}
 
 	occludes(other, camera) {
-		// Generate sample points offset slightly from each of the vertices
+		const otherPlane = other.plane;
+		const pointsInside = this.pointsInside;
+		for (let i=0; i<pointsInside.length; i++) {
+			const p = pointsInside[i];
+			const t = lineIntersectsPlane(camera.eye, p, otherPlane);
+			const pp = add(p, mul(sub(p, camera.eye), t));
+			if (other.contains(pp)) {
+				return t > 0;
+			}
+		}
 		let distMe = 0;
-		for (let i=0; i<this.points.length; i++) {
-			let np = mul(this.points[i], 0.99);
-			const rest = 0.01/(this.points.length-1);
-			for (let j=0; j<this.points.length; j++) {
-				if (i == j) {
-					continue;
-				}
-				np = add(np, mul(this.points[j], rest));
-			}
-			const dc = dist(np, camera.eye);
-			if (distMe == 0 || dc < distMe) {
-				distMe = dc;
-			}
-		}
 		let distOther = 0;
-		for (let i=0; i<other.points.length; i++) {
-			let np = mul(other.points[i], 0.99);
-			const rest = 0.01/(other.points.length-1);
-			for (let j=0; j<other.points.length; j++) {
-				if (i == j) {
-					continue;
-				}
-				np = add(np, mul(other.points[j], rest));
-			}
-			const dc = dist(np, camera.eye);
-			if (distOther == 0 || dc < distOther) {
-				distOther = dc;
-			}
-		}
-		return distMe < distOther;
-
-		/*let distMe = 0;
-		let distHull = 0;
 		this.points.forEach(p => {
 			distMe += mag(sub(p, camera.eye));
 		});
-		hull.points.forEach(p => {
-			distHull += mag(sub(p, camera.eye));
+		other.points.forEach(p => {
+			distOther += mag(sub(p, camera.eye));
 		});
-		return distMe < distHull;*/
+		return distMe < distOther;
 	}
 }
 
-function generateParts(n) {
+/*function generateParts(n) {
 	const parts = [];
 	let sum = 0;
 	for (let i=0; i<n; i++) {
@@ -622,7 +605,7 @@ function generateParts(n) {
 		parts[i] = parts[i]/sum;
 	}
 	return parts;
-}
+}*/
 
 // A horizontal ray from point p crosses the line segment defined by p0 and p1
 function rayCrossesLine(p, p1, p2) {
