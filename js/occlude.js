@@ -565,27 +565,41 @@ class Hull2D {
 		return point;
 	}
 
-	occludes(hull, camera) {
-		/*const oplane = hull.plane;
-		// Generate sample points
-		// As many sample point as needed before we get one that intersects
-		// Both faces
-		const vals = [];
-		for (let i=0; i<100; i++) {
-			const point = this.pointInside;
-			const t = lineIntersectsPlane(camera.eye, point, oplane);
-			const pp = add(mul(sub(point, camera.eye), t), point);
-			if (hull.contains(pp)) {
-				vals.push(t > 0);
-			}
-		}
-		for (let i=0; i<vals.length; i++) {
-			if (vals[i] ^ vals[0]) {
-				console.log(vals);
-			}
-		}
-		return vals[0];*/
+	occludes(other, camera) {
+		// Generate sample points offset slightly from each of the vertices
 		let distMe = 0;
+		for (let i=0; i<this.points.length; i++) {
+			let np = mul(this.points[i], 0.99);
+			const rest = 0.01/(this.points.length-1);
+			for (let j=0; j<this.points.length; j++) {
+				if (i == j) {
+					continue;
+				}
+				np = add(np, mul(this.points[j], rest));
+			}
+			const dc = dist(np, camera.eye);
+			if (distMe == 0 || dc < distMe) {
+				distMe = dc;
+			}
+		}
+		let distOther = 0;
+		for (let i=0; i<other.points.length; i++) {
+			let np = mul(other.points[i], 0.99);
+			const rest = 0.01/(other.points.length-1);
+			for (let j=0; j<other.points.length; j++) {
+				if (i == j) {
+					continue;
+				}
+				np = add(np, mul(other.points[j], rest));
+			}
+			const dc = dist(np, camera.eye);
+			if (distOther == 0 || dc < distOther) {
+				distOther = dc;
+			}
+		}
+		return distMe < distOther;
+
+		/*let distMe = 0;
 		let distHull = 0;
 		this.points.forEach(p => {
 			distMe += mag(sub(p, camera.eye));
@@ -593,7 +607,7 @@ class Hull2D {
 		hull.points.forEach(p => {
 			distHull += mag(sub(p, camera.eye));
 		});
-		return distMe < distHull;
+		return distMe < distHull;*/
 	}
 }
 
