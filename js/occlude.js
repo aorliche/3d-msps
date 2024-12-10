@@ -57,6 +57,10 @@ function dist(a, b) {
 	return mag(sub(a, b));
 }
 
+function dist2d(a, b) {
+	return dist(Vec(a.x, a.y, 0), Vec(b.x, b.y, 0));
+}
+
 // Line extends from "eye" point to "test" point
 // Get a parameter t saying if "test" point is behind plane (t negative)
 // Or in front of plane (t positive)
@@ -337,12 +341,29 @@ window.addEventListener('load', e => {
 		selectedVertex = null;
 		repaint();
 	});
+	/*console.log(pointInsidePolygon(Point(0,0), [Point(-1,-1), Point(-1,1), Point(1,1), Point(1,-1)]));
+	console.log(pointInsidePolygon(Point(0.9,0), [Point(-1,-1), Point(-1,1), Point(1,1), Point(1,-1)]));
+	console.log(pointInsidePolygon(Point(-2,0), [Point(-1,-1), Point(-1,1), Point(1,1), Point(1,-1)]));
+	console.log(pointInsidePolygon(Point(0,0), [Point(-1,-0.5), Point(-1,0.5), Point(1,1), Point(1,-1)]));
+	console.log(pointInsidePolygon(Point(0,1), [Point(-1,-0.5), Point(-1,0.5), Point(1,1), Point(1,-1)]));
+	console.log(pointInsidePolygon(Point(0,-0.46), [Point(-1,-0.5), Point(-1,0.5), Point(1,1), Point(1,-0.4)]));*/
 });
 
 // 2D hulls ordered from back to front
 // Invariant: hulls assumed not to cross each other
 // All points in hulls assumed to lie on the same plane
 function orderHulls(hulls,camera) {
+	const uniq = [];
+	outer:
+	for (let i=0; i<hulls.length; i++) {
+		for (let j=0; j<uniq.length; j++) {
+			if (hulls[i].equals(uniq[j])) {
+				continue outer;
+			}
+		}
+		uniq.push(hulls[i]);
+	}
+	hulls = uniq;
 	const occludes = hulls.map(h => []);
 	for (let i=0; i<hulls.length; i++) {
 		for (let j=i+1; j<hulls.length; j++) {
@@ -469,6 +490,19 @@ class Hull2D {
 		ctx.restore();
 	}
 
+	equals(hull) {
+		outer:
+		for (let i=0; i<this.points; i++) {
+			for (let j=0; j<hull.points; j++) {
+				if (dist(this.points[i], hull.points[j]) < 0.01) {
+					continue outer;
+				}
+			}
+			return false;
+		}
+		return true;
+	}
+
 	get plane() {
 		if (this.points.length < 3) {
 			console.log("Bad in get plane() npoints");
@@ -506,7 +540,51 @@ class Hull2D {
 		return numFound == this.points.length && numFound == hull.points.length;
 	}
 
+	// Assume points are ordered
+	contains(point) {
+		const cps = [];
+		for (let i=0; i<this.points.length; i++) {
+			const j = (i+1)%this.points.length;
+			const cp = cross(sub(this.points[i], point), sub(this.points[j], this.points[i]));
+			cps.push(cp);
+		}
+		for (let i=0; i<cps.length; i++) {
+			if (dot(cps[0], cps[i]) < 0) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	get pointInside() {
+		const parts = generateParts(this.points.length);
+		let point = Vec(0,0,0);
+		for (let j=0; j<parts.length; j++) {
+			point = add(point, mul(this.points[j], parts[j]));
+		}
+		return point;
+	}
+
 	occludes(hull, camera) {
+		/*const oplane = hull.plane;
+		// Generate sample points
+		// As many sample point as needed before we get one that intersects
+		// Both faces
+		const vals = [];
+		for (let i=0; i<100; i++) {
+			const point = this.pointInside;
+			const t = lineIntersectsPlane(camera.eye, point, oplane);
+			const pp = add(mul(sub(point, camera.eye), t), point);
+			if (hull.contains(pp)) {
+				vals.push(t > 0);
+			}
+		}
+		for (let i=0; i<vals.length; i++) {
+			if (vals[i] ^ vals[0]) {
+				console.log(vals);
+			}
+		}
+		return vals[0];*/
 		let distMe = 0;
 		let distHull = 0;
 		this.points.forEach(p => {
@@ -517,6 +595,59 @@ class Hull2D {
 		});
 		return distMe < distHull;
 	}
+}
+
+function generateParts(n) {
+	const parts = [];
+	let sum = 0;
+	for (let i=0; i<n; i++) {
+		parts.push(Math.random());
+		sum += parts.at(-1);
+	}
+	for (let i=0; i<n; i++) {
+		parts[i] = parts[i]/sum;
+	}
+	return parts;
+}
+
+// A horizontal ray from point p crosses the line segment defined by p0 and p1
+function rayCrossesLine(p, p1, p2) {
+	const mex = p.x;
+	const mey = p.y;
+	const o1x = p1.x;
+	const o1y = p1.y;
+	const o2x = p2.x;
+	const o2y = p2.y;
+	if (mey == o1y) {
+		if (mex < o1x) {
+			return true;
+		}
+	} else if (mey == o2y) {
+		if (mex < o2x) {
+			return true;
+		}
+	} else if ((mey > o1y && mey < o2y) || (mey > o2y && mey < o1y)) {
+		const dx = o2x-o1x;
+		const dy = o2y-o1y;
+		const dyp = mey-o1y;
+		const dxp = dyp*dx/dy;
+		const xp = mex-dxp;
+		if (xp < o1x) {
+			return true;
+		}
+	}
+	return false;
+}
+
+function pointInsidePolygon(p, points) {
+	let inter = 0;
+	for (let i=0; i<points.length; i++) {
+		const j = (i+1)%points.length;
+		if (rayCrossesLine(p, points[i], points[j])) {
+			inter++;
+		}
+	}
+	return (inter % 2) == 1;
 }
 
 class Camera {
