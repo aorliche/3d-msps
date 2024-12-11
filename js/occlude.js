@@ -244,6 +244,8 @@ function generatePipeds(v, pipeds) {
 	return npipeds;
 }
 
+let debugVs = null;
+
 window.addEventListener('load', e => {
 	/*testHulls();
 	const hulls = [];
@@ -258,15 +260,16 @@ window.addEventListener('load', e => {
 	const canvas = $('#canvas');
 	const camera = new Camera({canvas});
 	let selectedVertex = null;
-	let debugVs = pipeds[0].hulls[0].pointsInside;
 	function repaint() {
 		camera.clear();
-		const hulls = [];
+		let hulls = [];
 		pipeds.forEach(p => {
 			p.hulls.forEach(h => {
 				hulls.push(h);
 			});
 		});
+		debugVs = null;
+		//hulls = hulls.slice(0, 4);
 		const sorted = orderHulls(hulls, camera);
 		sorted.forEach(h => {
 			h.draw({camera, fillStyle: 'red', strokeStyle: 'black'});
@@ -278,6 +281,7 @@ window.addEventListener('load', e => {
 		if (debugVs) {
 			debugVs.forEach(v => {
 				const p = camera.projectToScreen(v);
+				if (!p) return;
 				fillCircle(camera.ctx, p, 5, 'green');
 			});
 		}
@@ -353,6 +357,25 @@ window.addEventListener('load', e => {
 // Invariant: hulls assumed not to cross each other
 // All points in hulls assumed to lie on the same plane
 function orderHulls(hulls,camera) {
+	function mySort(occludes) {
+		const N = occludes.length;
+		const sorted = [];
+		let iter = 0;
+		while (sorted.length != N && iter++ < 1000) {
+			for (let i=0; i<occludes.length; i++) {
+				if (occludes[i].length == 0 && !sorted.includes(i)) {
+					sorted.push(i);
+					for (let j=0; j<occludes.length; j++) {
+						const idx = occludes[j].indexOf(i);
+						if (idx != -1) {
+							occludes[j].splice(idx, 1);
+						}
+					}
+				}
+			}
+		}
+		return sorted;
+	}
 	const uniq = [];
 	outer:
 	for (let i=0; i<hulls.length; i++) {
@@ -374,7 +397,8 @@ function orderHulls(hulls,camera) {
 			} 
 		}
 	}
-	const sorted = hulls.map((h,i) => [h,i]);
+	const sorted = mySort(occludes);
+	/*const sorted = hulls.map((h,i) => [h,i]);
 	sorted.sort(function (a,b) {
 		if (occludes[a[1]].includes(b[1])) {
 			return 1;
@@ -384,8 +408,11 @@ function orderHulls(hulls,camera) {
 			return 0;
 		}
 	});
-	return sorted.map(hi => hi[0]);
+	console.log(sorted.map(hi => hi[1]));*/
+	return sorted.map(i => hulls[i]);
 }
+
+const colors = ['#f00', '#0f0', '#00f', '#faa', '#afa', '#aaf'];
 
 class Piped {
 	constructor(params) {
@@ -440,14 +467,14 @@ class Piped {
 		const firstStart = this.points[0];
 		const secondStart = add(this.points[0], add(a, add(b, c)));
 		const hulls = [];
-		firstThree.forEach(pair => {
+		firstThree.forEach((pair) => {
 			const [a, b] = pair;
 			const points = [];
 			const sides = [Vec(0,0,0), a, add(a,b), b];
 			sides.forEach(s => points.push(add(firstStart, s)));
 			hulls.push(new Hull2D({points}));
 		});
-		secondThree.forEach(pair => {
+		secondThree.forEach((pair) => {
 			const [a, b] = pair;
 			const points = [];
 			const sides = [Vec(0,0,0), a, add(a,b), b];
@@ -464,6 +491,7 @@ class Hull2D {
 	constructor(params) {
 		// Deep copy
 		this.points = params.points.map(p => Vec(p.x, p.y, p.z));
+		//this.i = params.i;
 	}
 
 	draw(params) {
@@ -582,7 +610,9 @@ class Hull2D {
 				return t > 0;
 			}
 		}
-		let distMe = 0;
+		return false;
+		//console.log(vals);
+		/*let distMe = 0;
 		let distOther = 0;
 		this.points.forEach(p => {
 			distMe += mag(sub(p, camera.eye));
@@ -590,7 +620,7 @@ class Hull2D {
 		other.points.forEach(p => {
 			distOther += mag(sub(p, camera.eye));
 		});
-		return distMe < distOther;
+		return distMe < distOther;*/
 	}
 }
 
