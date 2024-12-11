@@ -600,6 +600,25 @@ class Hull2D {
 	}
 
 	occludes(other, camera) {
+		// Fast path if all corners are behind or in front of other
+		let minMe = null;
+		let maxMe = null;
+		let minOther = null;
+		let maxOther = null;
+		this.points.forEach(p => {
+			const d = dist(p, camera.eye);
+			if (minMe == null || d < minMe) minMe = d;
+			if (maxMe == null || d > maxMe) maxMe = d;
+		});
+		other.points.forEach(p => {
+			const d = dist(p, camera.eye);
+			if (minOther == null || d < minOther) minOther = d;
+			if (maxOther == null || d > maxOther) maxOther = d;
+		});
+		if (maxMe < minOther) return true;
+		if (maxOther < minMe) return false;
+		// Slow path
+		// Occlusion through ray tracing
 		const otherPlane = other.plane;
 		const pointsInside = this.pointsInside;
 		for (let i=0; i<pointsInside.length; i++) {
@@ -611,16 +630,6 @@ class Hull2D {
 			}
 		}
 		return false;
-		//console.log(vals);
-		/*let distMe = 0;
-		let distOther = 0;
-		this.points.forEach(p => {
-			distMe += mag(sub(p, camera.eye));
-		});
-		other.points.forEach(p => {
-			distOther += mag(sub(p, camera.eye));
-		});
-		return distMe < distOther;*/
 	}
 }
 
