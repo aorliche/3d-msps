@@ -260,6 +260,7 @@ window.addEventListener('load', e => {
 	const canvas = $('#canvas');
 	const camera = new Camera({canvas});
 	let selectedVertex = null;
+	const colored = {};
 	function repaint() {
 		camera.clear();
 		let hulls = [];
@@ -269,10 +270,11 @@ window.addEventListener('load', e => {
 			});
 		});
 		debugVs = null;
-		//hulls = hulls.slice(0, 4);
 		const sorted = orderHulls(hulls, camera);
+		let fillStyle = $('#invisFaces').checked ? false : 'red';
 		sorted.forEach(h => {
-			h.draw({camera, fillStyle: 'red', strokeStyle: 'black'});
+			let myFill = colored[h.key] && fillStyle ? colors[colored[h.key]] : fillStyle;
+			h.draw({camera, fillStyle: myFill, strokeStyle: 'black'});
 		});
 		if (selectedVertex) {
 			const p = camera.projectToScreen(selectedVertex);
@@ -287,6 +289,9 @@ window.addEventListener('load', e => {
 		}
 	}
 	repaint();
+	$('#invisFaces').addEventListener('change', e => {
+		repaint();
+	});
 	document.addEventListener('keydown', e => {
 		if (e.key == 'ArrowUp') {
 			camera.rotateAroundHorizontal(0.05);
@@ -303,17 +308,46 @@ window.addEventListener('load', e => {
 		repaint();
 	});
 	let mouseCur = null;
+	let mouseOrig = null;
 	canvas.addEventListener('mousedown', e => {
 		mouseCur = Point(e.offsetX, e.offsetY);
+		mouseOrig = mouseCur;
 	});
 	canvas.addEventListener('mouseup', e => {
-		if (!mouseCur) return;
+		if (!mouseOrig) return;
 		// Click
 		const newCur = Point(e.offsetX, e.offsetY);
-		const delta = Point(newCur.x-mouseCur.x, newCur.y-mouseCur.y);
+		const delta = Point(newCur.x-mouseOrig.x, newCur.y-mouseOrig.y);
 		if (mag(Vec(delta.x, delta.y, 0)) < 5) {
-			selectedVertex = selectVertex(mouseCur, pipeds, camera);
+			selectedVertex = selectVertex(mouseOrig, pipeds, camera);
 			repaint();
+			// Change face color
+			if (selectedVertex == null && $('#changeFaceColor').checked) {
+				let hulls = [];
+				pipeds.forEach(p => {
+					p.hulls.forEach(h => {
+						hulls.push(h);
+					});
+				});
+				debugVs = null;
+				const sorted = orderHulls(hulls, camera);
+				const p = add(add(camera.c, 
+					mul(camera.hc, (canvas.height-newCur.y-canvas.height/2)/(canvas.height))), 
+					mul(camera.wc, (newCur.x-canvas.width/2)/(canvas.height)));
+				for (let i=sorted.length-1; i >= 0; i--) {
+					const plane = sorted[i].plane;
+					const t = lineIntersectsPlane(camera.eye, p, plane);
+					const pp = add(p, mul(sub(p, camera.eye), t));
+					if (sorted[i].contains(pp)) {
+						const key = sorted[i].key;
+						const val = colored[key] ? colored[key] : 0;
+						colored[key] = (val+1)%6;
+						console.log(colored);
+						repaint();
+						break;
+					}
+				}
+			}
 		}
 		// Stop rotating
 		mouseCur = null;
@@ -413,6 +447,7 @@ function orderHulls(hulls,camera) {
 }
 
 const colors = ['#f00', '#0f0', '#00f', '#faa', '#afa', '#aaf'];
+let pipednum = 0;
 
 class Piped {
 	constructor(params) {
@@ -421,6 +456,7 @@ class Piped {
 		}
 		// Deep copy
 		this.points = params.points.map(p => Vec(p.x, p.y, p.z));
+		this.pipedid = pipednum++;
 	}
 
 	get sides() {
@@ -467,19 +503,19 @@ class Piped {
 		const firstStart = this.points[0];
 		const secondStart = add(this.points[0], add(a, add(b, c)));
 		const hulls = [];
-		firstThree.forEach((pair) => {
+		firstThree.forEach((pair,idx) => {
 			const [a, b] = pair;
 			const points = [];
 			const sides = [Vec(0,0,0), a, add(a,b), b];
 			sides.forEach(s => points.push(add(firstStart, s)));
-			hulls.push(new Hull2D({points}));
+			hulls.push(new Hull2D({points, pipedid: this.pipedid, hullid: idx}));
 		});
-		secondThree.forEach((pair) => {
+		secondThree.forEach((pair,idx) => {
 			const [a, b] = pair;
 			const points = [];
 			const sides = [Vec(0,0,0), a, add(a,b), b];
 			sides.forEach(s => points.push(add(secondStart, s)));
-			hulls.push(new Hull2D({points}));
+			hulls.push(new Hull2D({points, pipedid: this.pipedid, hullid: idx+3}));
 		});
 		return hulls;
 	}
@@ -491,7 +527,8 @@ class Hull2D {
 	constructor(params) {
 		// Deep copy
 		this.points = params.points.map(p => Vec(p.x, p.y, p.z));
-		//this.i = params.i;
+		this.pipedid = params.pipedid ?? -1;
+		this.hullid = params.hullid ?? -1;
 	}
 
 	draw(params) {
@@ -516,6 +553,10 @@ class Hull2D {
 			ctx.stroke();
 		}
 		ctx.restore();
+	}
+
+	get key() {
+		return `${this.pipedid}:${this.hullid}`;
 	}
 
 	equals(hull) {
@@ -746,10 +787,12 @@ class Camera {
 
 	// Rotate point b theta degrees around the axis c 
 	// c assumed to start from (0,0,0)
+	// TODO: figure out why some rotations around 
+	// vertical or horizontal make objects bigger/smaller (bug)
 	rotate(b, c, theta) {
 		const bc = cross(b, c);
 		const t = Math.tan(theta)*mag(b)/mag(bc);
-		const tbc = mul(cross(b, c), t);
+		const tbc = mul(bc, t);
 		const btbc = add(b, tbc);
 		const s = mag(b)/mag(btbc);
 		const res = mul(btbc, s);
