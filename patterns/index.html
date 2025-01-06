@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Pattern Test</title>
+		<link rel='stylesheet' type='text/css' href='css/pattern.css'>
+		<script type='module' src='js/pattern.js'></script>
+	</head>
+	<body>
+		<canvas id='canvas' width='800' height='600'></canvas>
+		<div id='controls'>
+			<label for='stripeColor'>Stripe Color:</label>
+			<input id='stripeColor' name='stripeColor' size='20' value='red'>
+			<br>
+			<label for='stripeColorWidth'>Color Width:</label>
+			<input id='stripeColorWidth' name='stripeColorWidth' type='range' min='1' max='50'>
+			<br>
+			<label for='stripeBlankWidth'>Blank Width:</label>
+			<input id='stripeBlankWidth' name='stripeBlankWidth' type='range' min='1' max='50'>
+			<br>
+			<label for='stripeAngle'>Stripe Angle:</label>
+			<input id='stripeAngle' name='stripeAngle' type='range' min='0' max='180'>
+			<br>
+			<hr>
+			<label for='dotColor'>Dot Color:</label>
+			<input id='dotColor' name='dotColor' size='20' value='red'>
+			<br>
+			<label for='dotSize'>Dot Size:</label>
+			<input id='dotSize' name='dotSize' type='range' min='1' max='50'>
+			<br>
+			<label for='dotSpacing'>Dot Spacing:</label>
+			<input id='dotSpacing' name='dotSpacing' type='range' min='10' max='100'>
+			<br>
+			<label for='dotAngle'>Dot Angle:</label>
+			<input id='dotAngle' name='dotAngle' type='range' min='0' max='180'>
+			<br>
+			<div id='stripePreviewDiv'>
+				<img id='stripePreview' src='' alt='Preview'> 
+			</div>
+		</div>
+	</body>
+</html>

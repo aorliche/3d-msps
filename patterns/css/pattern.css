@@ -1,0 +1,21 @@
+body {
+	display: flex;
+	flex-wrap: no-wrap;
+}
+#canvas {
+	border: 1px solid black;
+}
+#controls {
+	width: 350px;
+	margin-left: 10px;
+}
+#controls label {
+	display: inline-block;
+	width: 120px;
+}
+#stripePreviewDiv {
+	width: 200px;
+	height: 200px;
+	overflow: hidden;
+	border: 1px solid black;
+}
